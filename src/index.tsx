@@ -56,11 +56,22 @@ export type MKLBlock = {
   bounding: Bounding;
 };
 
+type Frame = {
+  isValid: boolean;
+  width: number;
+  height: number;
+  bytesPerRow: number;
+  planesCount: number;
+  toString(): string;
+  close(): void;
+}
+
 export type MlkitOcrResult = MKLBlock[];
 
 type MlkitOcrModule = {
   detectFromUri(uri: string): Promise<MlkitOcrResult>;
   detectFromFile(path: string): Promise<MlkitOcrResult>;
+  detectFromFrame(frame: Frame): Promise<MlkitOcrResult>;
 };
 
 const MlkitOcr: MlkitOcrModule = NativeModules.MlkitOcr;
@@ -75,6 +86,13 @@ const MLKit: MlkitOcrModule = {
   },
   detectFromFile: async (path: string) => {
     const result = await MlkitOcr.detectFromFile(path);
+    if (!result) {
+      return [];
+    }
+    return result;
+  },
+  detectFromFrame: async (frame: Frame) => {
+    const result = await MlkitOcr.detectFromFrame(frame);
     if (!result) {
       return [];
     }

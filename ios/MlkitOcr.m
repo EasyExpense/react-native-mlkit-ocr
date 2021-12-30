@@ -5,6 +5,7 @@
 
 #import <CoreGraphics/CoreGraphics.h>
 #import <GoogleMLKit/MLKit.h>
+#import <VisionCamera/Frame.h>
 
 @implementation MlkitOcr
 
@@ -16,7 +17,7 @@ static NSString *const detectionNoResultsMessage = @"Something went wrong";
 
 NSMutableArray* getCornerPoints(NSArray *cornerPoints) {
     NSMutableArray *result = [NSMutableArray array];
-    
+
     if (cornerPoints == nil) {
         return result;
     }
@@ -43,7 +44,7 @@ NSDictionary* getBounding(CGRect frame) {
 NSMutableArray* prepareOutput(MLKText *result) {
     NSMutableArray *output = [NSMutableArray array];
     for (MLKTextBlock *block in result.blocks) {
-        
+
         NSMutableArray *blockElements = [NSMutableArray array];
         for (MLKTextLine *line in block.lines) {
             NSMutableArray *lineElements = [NSMutableArray array];
@@ -54,7 +55,7 @@ NSMutableArray* prepareOutput(MLKText *result) {
                 e[@"bounding"] = getBounding(element.frame);
                 [lineElements addObject:e];
             }
-            
+
             NSMutableDictionary *l = [NSMutableDictionary dictionary];
             l[@"text"] = line.text;
             l[@"cornerPoints"] = getCornerPoints(line.cornerPoints);
@@ -62,7 +63,7 @@ NSMutableArray* prepareOutput(MLKText *result) {
             l[@"bounding"] = getBounding(line.frame);
             [blockElements addObject:l];
         }
-        
+
         NSMutableDictionary *b = [NSMutableDictionary dictionary];
         b[@"text"] = block.text;
         b[@"cornerPoints"] = getCornerPoints(block.cornerPoints);
@@ -80,11 +81,11 @@ RCT_REMAP_METHOD(detectFromUri, detectFromUri:(NSString *)imagePath resolver:(RC
         reject(@"wrong_arguments", @"No image uri provided", nil);
         return;
     }
-    
+
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:imagePath]];
         UIImage *image = [UIImage imageWithData:imageData];
-        
+
         if (!image) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 RCTLog(@"No image found %@", imagePath);
@@ -92,10 +93,10 @@ RCT_REMAP_METHOD(detectFromUri, detectFromUri:(NSString *)imagePath resolver:(RC
             });
             return;
         }
-        
+
         MLKTextRecognizer *textRecognizer = [MLKTextRecognizer textRecognizer];
         MLKVisionImage *handler = [[MLKVisionImage alloc] initWithImage:image];
-        
+
         [textRecognizer processImage:handler completion:^(MLKText  *_Nullable result, NSError *_Nullable error) {
             @try {
                 if (error != nil || result == nil) {
@@ -117,11 +118,11 @@ RCT_REMAP_METHOD(detectFromUri, detectFromUri:(NSString *)imagePath resolver:(RC
                     resolve(pData);
                 });
             }
-            
+
         }];
-        
+
     });
-    
+
 }
 
 RCT_REMAP_METHOD(detectFromFile, detectFromFile:(NSString *)imagePath resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
@@ -129,21 +130,21 @@ RCT_REMAP_METHOD(detectFromFile, detectFromFile:(NSString *)imagePath resolver:(
         reject(@"wrong_arguments", @"No image path provided", nil);
         return;
     }
-    
+
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSData *imageData = [NSData dataWithContentsOfFile:imagePath];
         UIImage *image = [UIImage imageWithData:imageData];
-        
+
         if (!image) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 reject(@"no_image", @"No image path provided", nil);
             });
             return;
         }
-        
+
         MLKTextRecognizer *textRecognizer = [MLKTextRecognizer textRecognizer];
         MLKVisionImage *handler = [[MLKVisionImage alloc] initWithImage:image];
-        
+
         [textRecognizer processImage:handler completion:^(MLKText *_Nullable result, NSError *_Nullable error) {
             @try {
                 if (error != nil || result == nil) {
@@ -151,7 +152,7 @@ RCT_REMAP_METHOD(detectFromFile, detectFromFile:(NSString *)imagePath resolver:(
                     @throw [NSException exceptionWithName:@"failure" reason:errorString userInfo:nil];
                     return;
                 }
-            
+
                 NSMutableArray *output = prepareOutput(result);
                 dispatch_async(dispatch_get_main_queue(), ^{
                     resolve(output);
@@ -166,10 +167,45 @@ RCT_REMAP_METHOD(detectFromFile, detectFromFile:(NSString *)imagePath resolver:(
                     resolve(pData);
                 });
             }
-            
+
         }];
     });
-    
+
+}
+
+RCT_REMAP_METHOD(detectFromFrame, detectFromFrame:(Frame *)frame resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        MLKTextRecognizer *textRecognizer = [MLKTextRecognizer textRecognizer];
+        MLKVisionImage *handler = [[MLKVisionImage alloc] initWithBuffer:frame.buffer];
+        handler.orientation = frame.orientation;
+
+        [textRecognizer processImage:handler completion:^(MLKText *_Nullable result, NSError *_Nullable error) {
+            @try {
+                if (error != nil || result == nil) {
+                    NSString *errorString = error ? error.localizedDescription : detectionNoResultsMessage;
+                    @throw [NSException exceptionWithName:@"failure" reason:errorString userInfo:nil];
+                    return;
+                }
+
+                NSMutableArray *output = prepareOutput(result);
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    resolve(output);
+                });
+            }
+            @catch (NSException *e) {
+                NSString *errorString = e ? e.reason : detectionNoResultsMessage;
+                NSDictionary *pData = @{
+                                        @"error": [NSMutableString stringWithFormat:@"On-Device text detection failed with error: %@", errorString],
+                                        };
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    resolve(pData);
+                });
+            }
+
+        }];
+    });
+
 }
 
 

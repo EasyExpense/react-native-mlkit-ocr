@@ -1,5 +1,7 @@
 package com.reactnativemlkitocr
 
+import androidx.camera.core.ImageProxy;
+
 import android.graphics.Point
 import android.graphics.Rect
 import android.net.Uri
@@ -27,10 +29,33 @@ class MlkitOcrModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
     return this.detectFromResource(path, promise);
   }
 
+  @ReactMethod
+  fun detectFromFrame(frame: ImageProxy, promise: Promise) {
+    val mediaImage: Image = frame.getImage();
+    return this.detectFromImageProxy(mediaImage, promise);
+  }
+
   private fun detectFromResource(path: String, promise: Promise) {
     val image: InputImage;
     try {
       image = InputImage.fromFilePath(reactApplicationContext,  Uri.parse(path));
+      val recognizer = TextRecognition.getClient();
+      recognizer.process(image).addOnSuccessListener { visionText ->
+        promise.resolve(getDataAsArray(visionText))
+      }.addOnFailureListener { e ->
+        promise.reject(e);
+        e.printStackTrace();
+      }
+    } catch (e: Exception) {
+      promise.reject(e);
+      e.printStackTrace();
+    }
+  }
+
+  private fun detectFromImageProxy(image: ImageProxy, promise: Promise) {
+    val image: InputImage;
+    try {
+      image = InputImage.fromMediaImage(mediaImage, frame.getImageInfo().getRotationDegrees());
       val recognizer = TextRecognition.getClient();
       recognizer.process(image).addOnSuccessListener { visionText ->
         promise.resolve(getDataAsArray(visionText))
